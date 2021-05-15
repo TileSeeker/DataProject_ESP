@@ -33,6 +33,7 @@ MFRC522 rfid(SS_PIN, RST_PIN);      // Instance of the class
 #define ledBlue_RFIO 13 // led Yellow                   (Output) 
 #define ledYellow_RFIO 12 // led Blue                   (Output) 
 
+// Global variabels: 
 int counter_meny = 2;           // cCount up and down, from 1 to 6
 unsigned long time_now = 0;     // Time from start
 unsigned long time_button = 0;  // Time from last button pressed
@@ -91,7 +92,7 @@ void loop() {
 }
 
 // ---------------------------------------------- Meny_uppdown -------------------------------------------------------------------
-// Denne funksjonen endrer en teller fra 1 til 6 og retunerer denne. 
+// Denne funksjonen endrer en teller fra 1 til 6 og retunerer dens verdi. 
 int Meny_uppdown(int counter, int state_button_opp, int state_button_ned ) { // Input: beboer num, Button state upp, button state down. 
   if ((state_button_opp == LOW) and (counter < 6)) {
     counter += 1;
@@ -345,12 +346,12 @@ void WriteToCOT_antall_hybel () {
 // samstundes som "Inngangsdor_statusregister" vil endre beboeren sine gjester til 0.
 
 void RFID() {
-  //------ Unique UDI beboer -----
+  //------ Unique UDI beboer ----- ( the databas )
   byte Bebeor1_card[4] = {215, 0, 169, 6};    // RFID brikke beboer 1
   byte Bebeor2_card[4] = {83, 172, 140, 185}; // RFID brikke beboer 2
   // add more unique UDI here...
 
-  // 1) ------ Feel for RFID-tag ----- (If no Tag near exit the void)
+  // 1) ------ Feel for RFID-tag ----- (If no Tag exit the void)
   if ( ! rfid.PICC_IsNewCardPresent())  // No RFID-tag on the antenna. Jump out of "RFID"
     return;
   if ( ! rfid.PICC_ReadCardSerial())   // RFID-tag detected
@@ -379,7 +380,7 @@ void RFID() {
   }
 
   // 3) ------ Retrive Keys -----
-  char *myArray[] = {"27545", "31631", "2277", "9663", "10799", "24425"};   // CoT - Inngangsdor_statusregister - keylist:
+  char *myArray[] = {"27545", "31631", "2277", "9663", "10799", "24425"};   // CoT - Inngangsdor_statusregister - key
   char *key_beboer = myArray[counter - 1];
   char *myArray2[] = {"19808", "24769", "20536", "3430", "2105", "10015"};  // CoT - PersonX_statusregister - key
   char *key_lokasjon_person = myArray2[counter - 1] ;
@@ -393,11 +394,11 @@ void RFID() {
   double A_lokasjon_person = circusESP32.read(key_lokasjon_person, token_Person_statusregister); // CoT - Inngangsdor_statusregister
 
   // 5) ------ Write valus to COT -----
-  if (A_lokasjon_person != 0) {
-    circusESP32.write(key_beboer ,  0 , token_Inngangsdor_statusregister);
+  if (A_lokasjon_person != 0) {   // change status to "not home"
+    circusESP32.write(key_beboer ,  0 , token_Inngangsdor_statusregister);    
     circusESP32.write(key_lokasjon_person , 0 , token_Person_statusregister);
     digitalWrite(ledBlue_RFIO, HIGH);
-  } else {
+  } else {                      // change status to "home"
     circusESP32.write(key_lokasjon_person , 1 , token_Person_statusregister);
     digitalWrite(ledYellow_RFIO, HIGH);
   }
@@ -405,6 +406,7 @@ void RFID() {
 
 // ------------------------------------------ LED ----------------------------------------------------------------------------
 // Denne funsjonen skrur av ledene etter en vis tid 
+// Det er en enkel måte å bruke sammetid på hver ledd
 void Led() {
   if ((led_toggle == 0) and ((digitalRead(led1) == HIGH) or (digitalRead(led2) == HIGH) or (digitalRead(led3) == HIGH) or (digitalRead(ledRed_RFIO) == HIGH) or (digitalRead(ledGreen_RFIO) == HIGH) or (digitalRead(ledBlue_RFIO) == HIGH) or (digitalRead(ledYellow_RFIO) == HIGH))) {
     time_led = millis();
@@ -433,6 +435,8 @@ int get_tens (int x) {    // only 2 siffer num
   int tens = x / 10;  //ones  A
   return tens;
 }
+
+// Denne funsjonen gjør det samme som get_one og get_ten bare at det kan være flere siffer 
 int get_num (int x, int place ) { // Get a number "x" and the desired digit placement "place". Return a singel digit.
   switch (place) {
     case 1:
