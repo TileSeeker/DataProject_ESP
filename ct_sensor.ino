@@ -4,7 +4,7 @@
 #include "WiFi.h"
 #include <ESP32AnalogRead.h>
 
-// The GPIO pins (ADC input) for CT sensor
+// GPIO pinnene (ADC input) for CT sensor
 #define ADC_PIN1 34
 #define ADC_PIN2 35
 #define ADC_PIN3 32
@@ -12,14 +12,14 @@
 #define ADC_PIN5 36
 #define ADC_PIN6 39
 
-// voltage
+// spenning
 #define HOME_VOLTAGE 230.0
 
-// Force EmonLib to use 10bit ADC resolution
+// EmonLib varibler for å bruke 10bit ADC oppløsning
 #define ADC_BITS    10
 #define ADC_COUNTS  (1<<ADC_BITS)
 
-// Create instances
+// lage emon instanser
 EnergyMonitor emon1;
 EnergyMonitor emon2;
 EnergyMonitor emon3;
@@ -41,7 +41,7 @@ char key_6 [] = "4649";
 const char ssid[] = "wifi";
 const char psk[] = "password";
 
-// Arrays to store 120 readings
+// Arrays for å lagere 120 målinger
 short watt_data1[120];
 short watt_data2[120];
 short watt_data3[120];
@@ -63,7 +63,7 @@ short watt_hours6;
 
 CircusESP32Lib circusESP32(server, ssid, psk);
 
-
+//sjekk om wifi tilgjenglig funksjon
 void connectWiFi() {
   Serial.println("WiFi...      ");
 
@@ -89,6 +89,7 @@ void connectWiFi() {
   Serial.println(WiFi.localIP());
 }
 
+//funksjon for å hente sensordata
 void get_sensordata() {
   double amps1 = emon1.calcIrms(1480);
   double watt1 = amps1 * HOME_VOLTAGE;
@@ -115,6 +116,7 @@ void get_sensordata() {
   watt_data6[Index_data] = watt6;
 }
 
+//funksjon som gjør om wattdata til wattimer
 void wattdata_to_watthours() {
   watt_hours1 = 0;
   watt_hours2 = 0;
@@ -139,6 +141,7 @@ void wattdata_to_watthours() {
   watt_hours6 = watt_hours6 / 120;
 }
 
+//funksjon laster opp COT
 void upload_CoT() {
   circusESP32.write(key_1, watt_hours1, token);
   circusESP32.write(key_2, watt_hours2, token);
@@ -148,6 +151,7 @@ void upload_CoT() {
   circusESP32.write(key_6, watt_hours6, token);
 }
 
+//setup funksjon: init pinnene, sjekker wifi connection
 void setup() {
   adc1_config_channel_atten(ADC1_CHANNEL_0, ADC_ATTEN_DB_11);
   adc1_config_channel_atten(ADC1_CHANNEL_3, ADC_ATTEN_DB_11);
@@ -169,7 +173,7 @@ void setup() {
   Setuptime_done = millis();
 }
 
-
+//lagerer data hvert 30 sekund i en time å laster opp til CoT
 void loop() {
   unsigned long time_now = millis();
 
