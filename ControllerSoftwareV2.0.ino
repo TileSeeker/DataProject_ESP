@@ -1,7 +1,11 @@
 /*Prosjektgruppe 17, Datateknikk_vår21 : HYBELHUS
 ***Arthur, Emil, Johanne, Peter, Roger, Willhelm***
 
+ControllerSoftwareV2.0
+
 Styreprogram for individuell, bærbar Controller til IoT Hybelhus
+Styreprogrammet settes til ønsket beboer/soverom med "beboerNum"
+variablen ved installering i huset.
 
 Implementert funksjonalitet:
   -Button-statemaskin med debounce og hurtigvalg ved å holde knappen inne.
@@ -9,14 +13,17 @@ Implementert funksjonalitet:
   -Skjerm med menyvisning og pop-up menyer for ulike ulike funksjoner.
   -Alarm ved brann, med lyd, lys og melding på skjerm.
   -Ringeklokke og mottak av gjester på døra.
-  -Multitasking av viktige funksjoner.
+  -"Multitasking" av viktige funksjoner og sjekking av buttons.
   -Sleepmode for ESP32 når knapper og menyer ikke brukes.
-  -Statussjekk mot CoT-registere hvert 10 sek.
-  -Mulighet for manuell styring av lys, varme, takvifte og lufting/vindu.
+  -Statussjekk mot CoT-registere hvert 30 sek, settes  med "lesCotIntervall" = 30000
+
+  -Mulighet for manuell styring av lys, takvifte og lufting/vindu.
+  -Instilling av ønsket temperatur mellom 12 og 25 Celsius grader
 
   Programmet har en egen statemaskin for registrering av knapper, som muliggjør samtidig kjøring av
   rutinene i default state i hovedstatemaskina mens knappetrykk sjekkes. Button og X, Y, Z variabler
-  styrer både menyene og programflyt både mainloop'en. og underfunksjoner. 
+  styrer både menyene og programflyt i mainloop'en. og i underfunksjoner. 
+
 
 */
 
@@ -55,7 +62,7 @@ Adafruit_ST7789 tft = Adafruit_ST7789(TFT_CS, TFT_DC, TFT_RST); //Konstruerer di
 #define blueLED 27
 #define buzzerAlarm 13
 
-bool DEBUG = 1; // 0 her slår av Serial og debug_kommentarer til seriellmonitoren
+bool DEBUG = 0; // 0 her slår av Serial og debug_kommentarer til seriellmonitoren
 
 //Setup for connecting with CoT
 char ssid[] = "SPLITTERPINE";  //"CAT S60"; //"Atle Idar sin iPhone"; // //internet name
@@ -102,7 +109,7 @@ bool trigger = LOW; // Styrer while looper sammen med knapper på simpel knappes
 
 //Variabler for Sleepmode timeren
 unsigned long timeMillis = 0;//Timer som styrer sleepmodus
-unsigned long sleepMillis = 30000; //sleepMillis=30000 sender ESP32 i sleepmodus etter et halvt minutt uten aktivitet på knappene
+unsigned long sleepMillis = 60000; //sleepMillis=30000 sender ESP32 i sleepmodus etter et halvt minutt uten aktivitet på knappene
 
 //Variabler for Menystyring og Display
 
@@ -124,7 +131,7 @@ const char *menyY00[4] = {"Booking","Gjester","Info/status","Instillinger"}; //M
 const char *menyY0Z[5] = {"Bad/Toalett","Toalett","Kjoekken","Stue","Kanseler booking*"}; //Menylevel 2
 const char *menyY1Z[5] = {"Send hjem 1","Send hjem alle","Not in use*","Not in use*","Not in use*"}; //Menylevel 2
 const char *menyY2Z[5] = {"Oversikt","Vaerdata*","Stroemforbruk*","Inneklima*","Bookinger*"}; //Menylevel 2
-const char *menyY3Z[5] = {"Lysdimming*","Default lysstyrke*","Temperatur*","Lufting/Vindu*","Takvifte Paa/Av*"}; //Menylevel 2
+const char *menyY3Z[5] = {"Lysdimming","Default lysstyrke","Temperatur","Lufting/Vindu","Takvifte Paa/Av"}; //Menylevel 2
 
 //Tokens for soverommene Rekkefølgen i arrays er soverom 1 til 6 (0-5 i array-posisjoner)
 char *array_tokens[] = {"eyJhbGciOiJIUzI1NiJ9.eyJqdGkiOiI1NDg5In0.BM73ysSfKKQDToNknonEI2KzO7oKwHQjLKUKIz9omyg",
@@ -240,10 +247,7 @@ void setup() {
     }
   //*****************Selvtest ferdig*******************
 
-
- 
-
-  //Velkomsttekst på display
+   //Velkomsttekst på display
   tft.setTextSize(2);
   tft.setTextColor(ST77XX_YELLOW, ST77XX_BLUE);
   tft.setCursor(35, 50);
@@ -254,9 +258,7 @@ void setup() {
   tft.setCursor(12, 100);
   tft.println("IoT HYBELHUS");
  
-  
-
- 
+   
   if(DEBUG) {Serial.begin(115200);}
   circusESP32.begin();// Initierer CoT-kommunikkasjonen
   delay(2000);
@@ -270,16 +272,16 @@ void loop() {  //Det er HER det skjer.... :-o
 
     case Mainloop: //Det som skal gjøres hele tiden 
 
-  /*    //Dette er sleepmode:
+     //Dette er sleepmode:
       //Rutinen som sender controlleren i DeepSleep mode etter 3 minutter når sleepMillis = 180000
       if(digitalRead(pil_Opp) == HIGH && digitalRead(pil_Ned) == HIGH && digitalRead(pil_Velg) == HIGH && digitalRead(pil_Ut) == HIGH){
-        if(millis()-timeMillis>= sleepMillis){ //Venter 30 sek
+        if(millis()-timeMillis>= sleepMillis){ //Venter 60 sek
           timeMillis = millis();
           Serial.println("Going to sleep");
           esp_deep_sleep_start();
         }
       }
-  */
+  
 
       if((Button > 0)&&(Button < 5)){ // Resetter Button til 0 etter at trykk er registrert og variabler oppdatert.
         if(DEBUG){Serial.print("Knapp trykket: "); Serial.println(Button);} //DEBUG
@@ -301,7 +303,6 @@ void loop() {  //Det er HER det skjer.... :-o
       if(CotTimer - forrigeCotTimer > lesCotIntervall){mainstate = SjekkCoT;}
       if(DEBUG){if(forrige_buttonstate != buttonstate){Serial.print("Switchcasestate nr: "); Serial.println(buttonstate);}} //DEBUG
 
-      //if((menypunkt_X == 2) && (menypunkt_Y == 2) && (menypunkt_Z == 0)){info();}
 
       if(menypunkt_X == 2 && menypunkt_Y == 0){mainstate = Booking;} //Går til case for valg av bookingfunksjoner
       if(menypunkt_X == 2 && menypunkt_Y == 1){mainstate = Gjester;} //Går til case for mottak/retur av gjester
@@ -322,7 +323,7 @@ void loop() {  //Det er HER det skjer.... :-o
 
     case Booking:
     if(menypunkt_Z < 4){bookingRutiner();if(DEBUG){Serial.println("Booking er utført");}} //funksjonen inn her???
-    if(menypunkt_Z == 4){if(DEBUG){Serial.println("KanselerBooking rutine er kjørt");}}
+    if(menypunkt_Z == 4){menydummy();if(DEBUG){Serial.println("KanselerBooking rutine er kjørt");}}
     
     mainstate = Mainloop;
     break;
@@ -344,26 +345,29 @@ void loop() {  //Det er HER det skjer.... :-o
     case Gjester:
       if(menypunkt_Z == 0){send_hjem(beboerNum);}
       if(menypunkt_Z == 1){send_hjem_alle(beboerNum);}
+      if(menypunkt_Z == 2){menydummy();}
+      if(menypunkt_Z == 3){menydummy();}
+      if(menypunkt_Z == 4){menydummy();}
       if(DEBUG){Serial.println("Gjestebehandling er utført");}
       mainstate = Mainloop;
     break;
 
     case Info:
         if(menypunkt_Z == 0){info();}
-        if(menypunkt_Z == 1){}
-        if(menypunkt_Z == 2){}
-        if(menypunkt_Z == 3){}
-        if(menypunkt_Z == 4){}
+        if(menypunkt_Z == 1){menydummy();}
+        if(menypunkt_Z == 2){menydummy();}
+        if(menypunkt_Z == 3){menydummy();}
+        if(menypunkt_Z == 4){menydummy();}
         if(DEBUG){Serial.println("Inforutine er utført");}
         mainstate = Mainloop;
     break;
 
      case Instillinger:
-        if(menypunkt_Z == 0){}
-        if(menypunkt_Z == 0){}
-        if(menypunkt_Z == 0){}
-        if(menypunkt_Z == 0){}
-        if(menypunkt_Z == 0){}
+        if(menypunkt_Z == 0){lysDimming();}
+        if(menypunkt_Z == 1){lysStyrke();}
+        if(menypunkt_Z == 2){temperatur();}
+        if(menypunkt_Z == 3){vindu();}
+        if(menypunkt_Z == 4){vifte();}
         if(DEBUG){Serial.println("Instillingsrutine er utført");}
         mainstate = Mainloop;
     break;
@@ -437,7 +441,7 @@ void oppdaterMeny(int x, int y, int z, int maxY, int maxZ){ //Skriver hovedmeny 
   tft.setTextSize(Fontsize);
   tft.setTextColor(ST77XX_WHITE, ST77XX_BLACK);
 
-  if(x==0){ // Skriver Standardmenyen på skjermen
+  if(x==0){ // Skriver hovedmenyen på skjermen
     for(int n=0;n <= maxY;n++){
       tft.setCursor(15, 30 + Fontheight*n);
       tft.println(menyY00[n]);  
@@ -494,26 +498,51 @@ void oppdaterMeny(int x, int y, int z, int maxY, int maxZ){ //Skriver hovedmeny 
   }
 } //END FUNKTION oppdaterMeny
 
+void menydummy(){//Beskjed når ikke-implementerte menypunkter velges...
+
+  tft.fillScreen(ST77XX_BLACK);
+  tft.setTextColor(ST77XX_YELLOW, ST77XX_BLACK);
+  tft.setTextSize(3);
+  tft.setCursor(30, 60);
+  tft.print("**FUTURE**");
+  tft.setCursor(10, 100);
+  tft.print("New Function");
+  tft.setCursor(10, 150);
+  tft.print("TO COME HERE");
+  if(DEBUG){Serial.print("Menydummy Kjørt");}
+  delay(3000);
+
+  //Går tilbke til hovedmeny
+  menypunkt_X = 0;
+  menypunkt_Y = 0;
+  menypunkt_Z = 0;
+  oppdaterMeny(menypunkt_X,menypunkt_Z,menypunkt_Y,menymax_Y,menymax_Z);
+}//END FUNCTION menydummy
+
 
 
 void fastbookingToalett(){ //Funksjonen for hurtigbooking av toalett på GRØNN knapp
   //Her legges koden inn for direktebooking av første ledige tid for dobesøk på bad 1 eller 2
   //Svar gis i popup meny på controller,  med tidspunkt og rom.
+  menydummy();
   if(DEBUG){Serial.println("Toalett hurtigbooking på GRØNN knapp OK :-)");}
 }
 
 void fastbooking2(){ 
-  // Legg inn kode for hurtigbooking på RØD knapp her
+  // Legg inn kode/Funksjonskall for hurtigbooking på RØD knapp her
+  menydummy();
   if(DEBUG){Serial.println("Fastbooking rutine 2 på RØD knapp OK :-)");}
 }
 
 void fastbooking3(){ 
-  // Legg inn kode for hurtigbooking på GUL knapp her
+  // Legg inn kode/Funksjonskall for hurtigbooking på GUL knapp her
+  menydummy();
   if(DEBUG){Serial.println("Fastbooking rutine 3 på GUL knapp OK :-)");}
 }
 
 void fastbooking4(){ 
-  // Legg inn kode for hurtigbooking på BLÅ knapp her
+  // Legg inn kode/Funksjonskall for hurtigbooking på BLÅ knapp her
+  menydummy();
   if(DEBUG){Serial.println("Fastbooking rutine 4 på BLÅ knapp OK :-)");}
 }
 
@@ -578,40 +607,49 @@ void checkbuttonstate(int buttonpin) {
 }
 
 
-//**************************************************Arthur/Willhelm kode :-)**************************************************
-/*
-id lys() {
-  //Styrer lys nivået
-  //Lysnivået i rommet
-  // Signal 7 i soverom statusregisteret tilsier lys nivå fo testen
-  int Lys = circusESP32.read("17916", "eyJhbGciOiJIUzI1NiJ9.eyJqdGkiOiI1NDg5In0.BM73ysSfKKQDToNknonEI2KzO7oKwHQjLKUKIz9omyg");
-
-  tft.fillScreen(ST77XX_BLACK);
-
-  //Det skal vises lys nivået
-  while ( digitalRead(pil_Velg) == HIGH) {
-    if (digitalRead(pil_Ned) == LOW && Lys >= 0 ) {
-      Lys = Lys - 5;
-      delay(250);
-    }
-    else if (digitalRead(pil_Opp) == LOW && Lys <= 255) {
-      Lys = Lys + 5;
-      delay(250);
-    }
-    else { //Displayet viser verdiene
-      char L_[16];
+void lysStyrke() {
+ 
+  // Setter ønsket lysnivå i rommet Signal 1 i soverom statusregisteret tilsier lys nivå (0-255)
+  int Lys = circusESP32.read(order_key_LED, token);
+  char L_[16];
+  
+  //Displayet viser verdiene
       sprintf(L_, "Lys lvl %d", Lys);
+      tft.fillScreen(ST77XX_BLACK);
       tft.setTextColor(ST77XX_WHITE, ST77XX_BLACK);
       tft.setTextSize(3);
       tft.setCursor(10, 40);
       tft.print(L_);
-      Serial.print("Lys nivå");
-      Serial.print(Lys);
-      Serial.println(" ");
-      delay(250);
+      if(DEBUG){Serial.print("Lys nivå");Serial.print(Lys);Serial.println(" ");}
+
+  //Det skal vises lys nivået
+  while ( digitalRead(pil_Velg) == HIGH) {
+    if ((digitalRead(pil_Ned) == LOW) && (Lys >= 0)) {
+      Lys = Lys - 5;
+      delay(100);
+      //Displayet viser verdiene
+      sprintf(L_, "Lys lvl %d", Lys);
+      tft.fillScreen(ST77XX_BLACK);
+      tft.setTextColor(ST77XX_WHITE, ST77XX_BLACK);
+      tft.setTextSize(3);
+      tft.setCursor(10, 40);
+      tft.print(L_);
+      if(DEBUG){Serial.print("Lys nivå");Serial.print(Lys);Serial.println(" ");}
+    }
+    else if ((digitalRead(pil_Opp) == LOW) && (Lys <= 255)) {
+      Lys = Lys + 5;
+      delay(100);
+      //Displayet viser verdiene
+      sprintf(L_, "Lys lvl %d", Lys);
+      tft.fillScreen(ST77XX_BLACK);
+      tft.setTextColor(ST77XX_WHITE, ST77XX_BLACK);
+      tft.setTextSize(3);
+      tft.setCursor(10, 40);
+      tft.print(L_);
+      if(DEBUG){Serial.print("Lys nivå");Serial.print(Lys);Serial.println(" ");}  
     }
   }
-  circusESP32.write("13426", Lys, "eyJhbGciOiJIUzI1NiJ9.eyJqdGkiOiI1NDg5In0.BM73ysSfKKQDToNknonEI2KzO7oKwHQjLKUKIz9omyg");
+  circusESP32.write(order_key_LED, Lys, token);
   tft.fillScreen(ST77XX_BLACK);
   menypunkt_X = 0;
   menypunkt_Y = 0;
@@ -620,145 +658,266 @@ id lys() {
 }//END FUNCTION lys
 
 
-//Funksjoner som kanskje ikke rekker å implementere----------------------------------
 //Gjør at lyset styres automatisk eller manuelt
+void lysDimming(){ //Styrer lyset "direkte" med kontrolleren i manuelt modus
+  
+  //Setter førat auto eller manuelt modus for lyset. Hvis manuelt modus velges, kan lyset styres
+  //med grønn(opp) og rød(ned) knapp. Settes modus til auto, går rutinen tilbake til hovedmeny.
+        
+        int Lys = circusESP32.read(order_key_LED, token);
+        int automatisk = circusESP32.read(order_key_lysautomatisk, token);
+        char L_[16];
 
-void lysdimming(){ //Dimmer lyset automatisk via CoT
-  char order_key_lysautomatisk[] = "17916";//nøkkel.inforamasjon til Lys styrings nivå
-  int automatisk = circusESP32.read(order_key_lysautomatisk,token);
-  tft.fillScreen(ST77XX_BLACK);
-  //Når man trykker opp eller ned så vil lyset endre seg
-   while( digitalRead(pil_Velg)==HIGH){
+        tft.fillScreen(ST77XX_BLACK);
+        tft.setTextColor(ST77XX_WHITE, ST77XX_BLACK);
+        tft.setTextSize(3);
+        tft.setCursor(15, 30);
+        tft.print("Lysmodus:");
+         tft.setTextSize(2);
+        tft.setCursor(20, 80);
+        tft.print("Auto-> pil opp");
+        tft.setCursor(20, 120);
+        tft.print("Manuell -> pil ned");
+  
+  
+  while((digitalRead(pil_Velg)==HIGH) && (digitalRead(pil_Ut)==HIGH)){
     //automatisk 1 så vil lyset styre seg mot LUX sensoren
     //0 så vil lyset styres av Lys funksjonen på kontrolleren
-    if (digitalRead(pil_Ned)==LOW && automatisk == 1 ){
-      automatisk = automatisk - 1;
-      delay(250);
-    }
-    else if(digitalRead(pil_Opp)==LOW && automatisk == 0){
-      automatisk = automatisk + 1;
-      delay(250);
-    }
-    else{
-      if(automatisk==0){
-        tft.print("Lys: Automatisk")
-      }
-      else{
-        tft.print("Lys: Manuelt")
-      }
-      delay(250);
-    }
-  }
-  tft.fillScreen(ST77XX_BLACK);
-  circusESP32.write(order_key_lysautomatisk,automatisk,token);
-  menypunkt_X = 0;
-  menypunkt_Y = 0;
-  menypunkt_Z = 0;
-  oppdaterMeny(menypunkt_X,menypunkt_Z,menypunkt_Y,menymax_Y,menymax_Z);
-} //END FUNCTION lys
-
-
-void lysdimming(){ //Dimmer lyset automatisk via CoT
-  char order_key_lysautomatisk[] = "17916";//nøkkel.inforamasjon til Lys styrings nivå
-  int automatisk = circusESP32.read(order_key_lysautomatisk,token);
-  tft.fillScreen(ST77XX_BLACK);
-  //Når man trykker opp eller ned så vil lyset endre seg
-   while( digitalRead(pil_Velg)==HIGH){
-    //automatisk 1 så vil lyset styre seg mot LUX sensoren
-    //0 så vil lyset styres av Lys funksjonen på kontrolleren
-    if (digitalRead(pil_Ned)==LOW && automatisk == 1 ){
-      automatisk = automatisk - 1;
-      delay(250);
-    }
-    else if(digitalRead(pil_Opp)==LOW && automatisk == 0){
-      automatisk = automatisk + 1;
-      delay(250);
-    }
-    else{
-      if(automatisk==0){
-        tft.print("Lys: Automatisk")
-      }
-      else{
-        tft.print("Lys: Manuelt")
-      }
-      delay(250);
-    }
-  }
-  tft.fillScreen(ST77XX_BLACK);
-  circusESP32.write(order_key_lysautomatisk,automatisk,token);
-  menypunkt_X = 0;
-  menypunkt_Y = 0;
-  menypunkt_Z = 0;
-  oppdaterMeny(menypunkt_X,menypunkt_Z,menypunkt_Y,menymax_Y,menymax_Z);
-} //END FUNCTION lysdimming
-
-
-//Endre temperaturen
-void endre_temp_onsket(){
-  char order_key_onsketTemp[] = " 25901";//nøkkel.inforamasjon til ønsket temp
-  int temp_onsket = circusESP32.read(order_key_onsketTemp,token);
-  tft.fillScreen(ST77XX_BLACK);
-    while( digitalRead(pil_Velg)==HIGH){
-    if (digitalRead(pil_Ned)==0 && temp_onsket>=19 ){
-      temp_onsket = temp_onsket - 1;
-      delay(250);
-    }
-    else if(digitalRead(pil_Opp)==0 && temp_onsket<=25){
-      temp_onsket = temp_onsket + 1;
-      delay(250);
-    }
-    else{
-      //Info på display
-      char T_[16];
-      sprintf(L_,"Ønsket temperatur %dC",temp_onsket);
+    if (digitalRead(pil_Ned)==LOW){
+      automatisk = 0;
+      tft.fillScreen(ST77XX_BLACK);
       tft.setTextColor(ST77XX_WHITE, ST77XX_BLACK);
+      tft.setTextSize(3);
+      tft.setCursor(15, 80);
+      tft.print("Lys:");
+      tft.setCursor(15, 120);
+      tft.print("Manuelt   ");
+      delay(100);
+    }
+    else if(digitalRead(pil_Opp)==LOW){
+      automatisk = 1;
+      tft.fillScreen(ST77XX_BLACK);
+      tft.setTextColor(ST77XX_WHITE, ST77XX_BLACK);
+      tft.setTextSize(3);
+      tft.setCursor(15, 80);
+      tft.print("Lys:");
+      tft.setCursor(15, 120);
+      tft.print("Automatisk");
+      delay(100);
+    }
+  }
+  while((digitalRead(pil_Velg)==LOW) || (digitalRead(pil_Ut)==LOW)){delay(100);}//venter på at knapp slippes
+  circusESP32.write(order_key_lysautomatisk, automatisk, token); //Oppdaterer CoT-verdien
+  
+  if(automatisk == 0){// Her justeres lyset nå manuelt dersom manuell styring ble valgt eller var satt fra før
+    while ((digitalRead(pil_Velg) == HIGH) && (digitalRead(pil_Velg) == HIGH)) {
+      if ((digitalRead(pil_Ned) == LOW) && (Lys >= 0)) {
+        Lys = Lys - 5;
+        delay(100);
+        //Displayet viser verdiene
+        sprintf(L_, "Lys lvl %d", Lys);
+        tft.fillScreen(ST77XX_BLACK);
+        tft.setTextColor(ST77XX_WHITE, ST77XX_BLACK);
+        tft.setTextSize(3);
+        tft.setCursor(10, 40);
+        tft.print(L_);
+        if(DEBUG){Serial.print("Lys nivå");Serial.print(Lys);Serial.println(" ");}
+        circusESP32.write(order_key_LED, Lys, token);
+      }
+      else if ((digitalRead(pil_Opp) == LOW) && (Lys <= 255)) {
+        Lys = Lys + 5;
+        delay(100);
+        //Displayet viser verdiene
+        sprintf(L_, "Lys lvl %d", Lys);
+        tft.fillScreen(ST77XX_BLACK);
+        tft.setTextColor(ST77XX_WHITE, ST77XX_BLACK);
+        tft.setTextSize(3);
+        tft.setCursor(10, 40);
+        tft.print(L_);
+        if(DEBUG){Serial.print("Lys nivå");Serial.print(Lys);Serial.println(" ");}
+         circusESP32.write(order_key_LED, Lys, token); 
+      }      
+    }
+  }
+  tft.fillScreen(ST77XX_BLACK);
+  menypunkt_X = 0;
+  menypunkt_Y = 0;
+  menypunkt_Z = 0;
+  oppdaterMeny(menypunkt_X,menypunkt_Z,menypunkt_Y,menymax_Y,menymax_Z);
+} //END FUNCTION lysDimming
+
+
+void temperatur() {
+ 
+  // Setter ønsket temperatur i rommet Signal 6 i soverom statusregisteret,
+  // tilsier temperaturer mellom 12-25 grader.
+  int temp = circusESP32.read(order_key_onsketTemp, token);
+  char L_[16];
+  
+  //Displayet viser verdiene
+      sprintf(L_, "Temp lvl %d", temp);
+      tft.fillScreen(ST77XX_BLACK);
+      tft.setTextColor(ST77XX_WHITE, ST77XX_BLACK);
+      tft.setTextSize(3);
       tft.setCursor(10, 40);
-      tft.print(T_);
-      Serial.print("Ønsket temperatur");
-      Serial.println(temp_onsket);
-      delay(250);
+      tft.print(L_);
+      if(DEBUG){Serial.print("Temperatur");Serial.print(temp);Serial.println(" ");}
+
+  //Viser valgt temperatur
+  while ( digitalRead(pil_Velg) == HIGH) {
+    if ((digitalRead(pil_Ned) == LOW) && (temp > 12)) {
+      temp = temp - 1;
+      delay(100);
+      //Displayet viser verdiene
+      sprintf(L_, "Temp lvl %d", temp);
+      tft.fillScreen(ST77XX_BLACK);
+      tft.setTextColor(ST77XX_WHITE, ST77XX_BLACK);
+      tft.setTextSize(3);
+      tft.setCursor(10, 40);
+      tft.print(L_);
+      if(DEBUG){Serial.print("Temperatur");Serial.print(temp);Serial.println(" ");}
+    }
+    else if ((digitalRead(pil_Opp) == LOW) && (temp < 25)) {
+      temp = temp + 1;
+      delay(100);
+      //Displayet viser verdiene
+      sprintf(L_, "Temp lvl %d", temp);
+      tft.fillScreen(ST77XX_BLACK);
+      tft.setTextColor(ST77XX_WHITE, ST77XX_BLACK);
+      tft.setTextSize(3);
+      tft.setCursor(10, 40);
+      tft.print(L_);
+      if(DEBUG){Serial.print("Temperatur");Serial.print(temp);Serial.println(" ");}  
     }
   }
+  circusESP32.write(order_key_onsketTemp, temp, token);
   tft.fillScreen(ST77XX_BLACK);
-  circusESP32.write(order_key_onsketTemp,temp_onsket,token);
   menypunkt_X = 0;
   menypunkt_Y = 0;
   menypunkt_Z = 0;
   oppdaterMeny(menypunkt_X,menypunkt_Z,menypunkt_Y,menymax_Y,menymax_Z);
-} //END FUNCTION endre_temp_onsket
+}//END FUNCTION temperatur
 
 
-//-------------Styrer vifte på/av
-void takvifte(){
-  char order_key_takvifte[] = "17916";//nøkkel.inforamasjon til 
-  int takvifte = circusESP32.read(order_key_takvifte,token);
-  tft.fillScreen(ST77XX_BLACK);
-   while( digitalRead(pil_Velg)==HIGH){
-    if (digitalRead(pil_Ned)==LOW && takvifte == 1 ){
-      takvifte = takvifte - 1;
-      delay(250);
+void vifte(){
+ 
+  // Setter ønsket viftehastighet i rommet Signal 7 i soverom statusregisteret. 
+  //Vifte hastighet er (0(av) og 90-200)
+  int viftespeed = circusESP32.read(order_key_takvifte, token);
+  char L_[16];
+  if(viftespeed < 90){viftespeed = 90;} //Setter vifta til minste fart hvis den er slått av fra før
+  
+  //Displayet viser verdien
+      sprintf(L_, "Speed: %d ", viftespeed);
+      tft.fillScreen(ST77XX_BLACK);
+      tft.setTextColor(ST77XX_WHITE, ST77XX_BLACK);
+      tft.setTextSize(3);
+      tft.setCursor(20, 60);
+      tft.print("Viftens");
+      tft.setCursor(20, 90);
+      tft.print("hastighet:");
+      tft.setCursor(20, 150);
+      tft.print(L_);
+      if(DEBUG){Serial.print("Viftespeed");Serial.print(viftespeed);Serial.println(" ");}
+
+  //Det skal vises viftehastighet på skjermen
+  while ((digitalRead(pil_Velg) == HIGH) && (digitalRead(pil_Ut) == HIGH)) {
+    if ((digitalRead(pil_Ned) == LOW) && (viftespeed >= 90)) {
+      viftespeed = viftespeed - 5;
+      delay(100);
+      if(viftespeed < 90){viftespeed = 0;}
+      //Displayet viser verdiene
+      sprintf(L_, "Value: %d ", viftespeed);
+      //tft.fillScreen(ST77XX_BLACK);
+      tft.setTextColor(ST77XX_WHITE, ST77XX_BLACK);
+      tft.setTextSize(3);
+      tft.setCursor(20, 150);
+      tft.print(L_);
+      if(DEBUG){Serial.print("Viftespeed");Serial.print(viftespeed);Serial.println(" ");}
+      circusESP32.write(order_key_takvifte, viftespeed, token); 
     }
-    else if(digitalRead(pil_Opp)==LOW && takvifte == 0){
-      takvifte = takvifte + 1;
-      delay(250);
-    }
-    else{
-      if(takvifte == 0){
-        tft.print("Takvifte AV");
-      }
-      else{
-        tft.print("Takvifte PÅ");
-      }
+    else if ((digitalRead(pil_Opp) == LOW) && (viftespeed < 205)) {
+      viftespeed = viftespeed + 5;
+      delay(100);
+      if(viftespeed > 0 && viftespeed < 90){viftespeed = 90;}
+      //Displayet viser verdiene
+      sprintf(L_, "Value: %d ", viftespeed);
+      //tft.fillScreen(ST77XX_BLACK);
+      tft.setTextColor(ST77XX_WHITE, ST77XX_BLACK);
+      tft.setTextSize(3);
+      tft.setCursor(20, 150);
+      tft.print(L_);
+      if(DEBUG){Serial.print("Viftespeed");Serial.print(viftespeed);Serial.println(" ");}
+      circusESP32.write(order_key_takvifte, viftespeed, token);  
     }
   }
+  trigger = LOW;
   tft.fillScreen(ST77XX_BLACK);
-  circusESP32.write(order_key_takvifte,takvifte,token);
   menypunkt_X = 0;
   menypunkt_Y = 0;
   menypunkt_Z = 0;
   oppdaterMeny(menypunkt_X,menypunkt_Z,menypunkt_Y,menymax_Y,menymax_Z);
-} //END FUNCTION takvifte
-*/
+}//END FUNCTION vifte
+
+
+void vindu(){ //Styrer åpning og lukking av vinduet i soverommet manuelt fra kontrolleren
+ 
+  // Åpner eller lukker vinduet via Kontroller
+  int vindustatus = circusESP32.read(order_key_vindu, token);
+  char L_[16];
+  
+  //Displayet viser Status for vinduet 1=LUKKET, 0=ÅPENT
+      sprintf(L_, "Status: %d ", vindustatus);
+      tft.fillScreen(ST77XX_BLACK);
+      tft.setTextColor(ST77XX_WHITE, ST77XX_BLACK);
+      tft.setTextSize(3);
+      tft.setCursor(15, 60);
+      tft.print("Velg status");
+      tft.setTextSize(2);
+      tft.setCursor(5, 120);
+      tft.print("1 = Close  0 = Open");
+      tft.setTextSize(3);
+      tft.setCursor(25, 160);
+      tft.print(L_);
+      if(DEBUG){Serial.print("Vindu status: ");Serial.print(vindustatus);Serial.println(" ");}
+
+  //Viser valgt status for vinduet. Verdi velges med GRØNN(pil_Opp) og RØD(pil_Ned) knapp.
+  while ( digitalRead((pil_Velg) == HIGH) && (trigger == LOW)) {
+    if ((digitalRead(pil_Ned) == LOW) && (vindustatus == 1)) {
+      vindustatus = 0;
+      delay(100);
+      //Displayet viser verdiene
+      sprintf(L_, "Status: %d ", vindustatus);
+      tft.setTextColor(ST77XX_WHITE, ST77XX_BLACK);
+      tft.setTextSize(3);
+      tft.setCursor(25, 160);
+      tft.print(L_);
+      if(DEBUG){Serial.print("Vindu status:");Serial.print(vindustatus);Serial.println(" ");}
+      circusESP32.write(order_key_vindu, vindustatus, token);
+    }
+    else if ((digitalRead(pil_Opp) == LOW) && (vindustatus == 0)) {
+      vindustatus = 1;
+      delay(100);
+      //Displayet viser verdiene
+      sprintf(L_, "Status: %d ", vindustatus);
+      tft.setTextColor(ST77XX_WHITE, ST77XX_BLACK);
+      tft.setTextSize(3);
+      tft.setCursor(25, 160);
+      tft.print(L_);
+      if(DEBUG){Serial.print("Vindu status: ");Serial.print(vindustatus);Serial.println(" ");} 
+      circusESP32.write(order_key_vindu, vindustatus, token);
+    }
+    if( digitalRead(pil_Velg) == LOW){trigger = HIGH;}
+    
+  }
+  trigger = LOW;
+  tft.fillScreen(ST77XX_BLACK);
+  menypunkt_X = 0;
+  menypunkt_Y = 0;
+  menypunkt_Z = 0;
+  oppdaterMeny(menypunkt_X,menypunkt_Z,menypunkt_Y,menymax_Y,menymax_Z);
+}//END FUNCTION Vindu
+
 
 void info() { //Tekst framstilling i displayet av  vær, temperatur og strømforbruk
   tft.fillScreen(ST77XX_BLACK);
@@ -1152,7 +1311,6 @@ void sjekker(int beboer){ //Sjekker de forskjellige varslingene
   }
 } //END FUNCTION Sjekker
 
-
 //------------------------------ Sjekke variabel B, "Gjest på døra" --------------------------------------- (Universal)
 int ReadFromCOT_B_gjester_kontroller (int counter)  {// counter: er nummeret til beboer ( 1 til 6)
 
@@ -1165,7 +1323,6 @@ int ReadFromCOT_B_gjester_kontroller (int counter)  {// counter: er nummeret til
   int B_beboer = AB % 10;
   return B_beboer;  // Return B value
 } //END FUNCTION ReadFromCOT_B_gjester_kontroller
-
 
 //------------------------------ReadFromCOT_B_gjester_kontroller (slave til "sjekker()")   --------------------------------------- 
 int WriteToCOT_ja_gjester_kontroller(int counter){   // counter: er nummeret til beboer ( 1 til 6)
@@ -1230,8 +1387,29 @@ int splitt_num (int x, int place ){  // ansk for number "x", ask for num placeme
 } //END FUNCTION splitt_num
 
 
-
-
 //**************************Kode som ennå ikke er ferdig/implementert nedenfor her:****************************
 
+//Kanseller booking funskjon
 
+//Booking oversikt funksjon
+
+//Værdata funksjon (mer spesifikk enn "info()" funksjonen)
+
+//inneklima funksjon (må da få CO2 sensor på rom-modul til å sende data til CoT)
+
+//Hurtigbooking av toalett/bad etc. En automatisering av koden i booking funksjonen,
+// slik at første ledige tidspunkt for et rom blir booket.
+
+/*
+Legge inn styring via menypunktvariablene, slik at men returnerer til der en sto i menyen
+når en funksjon valgt i menyen -og ikke til hovedmeny hver gang. Dette kan gjøres ved å sette riktig
+X, Y og Z verdi i enden av kalte funksjoner og oppdatere menyen FØR funksjonen returnerer:
+
+  menypunkt_X = 0; setter menynivå
+  menypunkt_Y = 0; setter hovedmeny punkt
+  menypunkt_Z = 0; setter undermeny1 punkt
+  oppdaterMeny(menypunkt_X,menypunkt_Z,menypunkt_Y,menymax_Y,menymax_Z);
+*/
+
+
+//**************** Videre forbedringer, utvidelser...NEVER ENDING STORY!************
